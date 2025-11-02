@@ -105,8 +105,3 @@ UNION-based FULL JOIN: practical workaround in MySQL.
 
 Joins enable complex data relationships and analytical insights in real-world relational models.
 
-#### 🧩 Repository Structure
-alx-airbnb-database/
-└── database-adv-script/
-    ├── joins_queries.sql
-    └── README.md
