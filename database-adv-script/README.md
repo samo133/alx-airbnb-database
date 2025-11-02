@@ -1,107 +1,127 @@
-### ⚙️ Database Context
-The database simulates the Airbnb schema, with key tables such as:
-- **users** – stores user profile data (`user_id`, `first_name`, `last_name`, `email`, etc.)
-- **properties** – stores property details (`property_id`, `property_name`, `location`, `host_id`, etc.)
-- **bookings** – records each booking (`booking_id`, `user_id`, `property_id`, `start_date`, `end_date`, `total_price`)
-- **reviews** – stores reviews made by users (`review_id`, `user_id`, `property_id`, `rating`, `comment`)
+# 🏠 ALX Airbnb Database Module – Advanced SQL
+## Task: Subqueries (Correlated & Non-Correlated)
+
+### 📘 Objective
+Implement both **non-correlated** and **correlated** subqueries on an Airbnb-style schema.
+
+- **Non-correlated subquery:** Find properties with **average rating > 4.0**.  
+- **Correlated subquery:** Find users who have made **more than 3 bookings**.
 
 ---
 
-### 🧩 Queries Implemented
+## 🗃️ Schema Context (assumed)
+- **users**(`user_id`, `first_name`, `last_name`, …)
+- **properties**(`property_id`, `property_name`, `location`, `host_id`, …)
+- **reviews**(`review_id`, `property_id`, `user_id`, `rating`, `comment`, …)
+- **bookings**(`booking_id`, `user_id`, `property_id`, `start_date`, `end_date`, `total_price`, …)
 
-#### 1️⃣ INNER JOIN — Users with Their Bookings
-```sql
-SELECT 
-    b.booking_id,
-    b.property_id,
-    b.user_id,
-    u.first_name,
-    u.last_name,
-    b.start_date,
-    b.end_date,
-    b.total_price
-FROM bookings AS b
-INNER JOIN users AS u
-    ON b.user_id = u.user_id;
+---
+
+## 🔧 Files
+- `subqueries.sql` — contains both required queries (with comments).
+- `README.md` — this explanation file.
+
+Repo structure:
 ```
 
-Explanation:
+alx-airbnb-database/
+└── database-adv-script/
+├── subqueries.sql
+└── README.md
 
-Retrieves only users who have made bookings.
+````
 
-Excludes users without bookings or orphaned bookings.
+---
 
-#### 2️⃣ LEFT JOIN — Properties with Reviews
+## ✅ Implemented Queries
+
+### 1) Non-Correlated Subquery — Properties with Avg Rating > 4.0
+```sql
+SELECT 
+    p.property_id,
+    p.property_name,
+    p.location
+FROM properties AS p
+WHERE p.property_id IN (
+    SELECT r.property_id
+    FROM reviews AS r
+    GROUP BY r.property_id
+    HAVING AVG(r.rating) > 4.0
+)
+ORDER BY p.property_id;
+````
+
+**Why non-correlated?**
+The inner query does **not** reference columns from the outer query (`properties`). It independently returns the set of `property_id` values whose average rating exceeds 4.0; the outer query filters using `IN`.
+
+**Alternate form (derived table join):**
+
 ```sql
 SELECT 
     p.property_id,
     p.property_name,
     p.location,
-    r.review_id,
-    r.user_id AS reviewer_id,
-    r.rating,
-    r.comment
+    x.avg_rating
 FROM properties AS p
-LEFT JOIN reviews AS r
-    ON p.property_id = r.property_id;
+JOIN (
+    SELECT property_id, AVG(rating) AS avg_rating
+    FROM reviews
+    GROUP BY property_id
+    HAVING AVG(rating) > 4.0
+) AS x
+  ON x.property_id = p.property_id
+ORDER BY p.property_id;
 ```
 
-Explanation:
+---
 
-Returns all properties, including those with no reviews.
+### 2) Correlated Subquery — Users with > 3 Bookings
 
-If no review exists, the review_id and rating columns will return NULL.
-
-#### 3️⃣ FULL OUTER JOIN — All Users and All Bookings
 ```sql
-SELECT 
+SELECT
     u.user_id,
     u.first_name,
     u.last_name,
-    b.booking_id,
-    b.property_id,
-    b.start_date,
-    b.end_date
+    (
+        SELECT COUNT(*)
+        FROM bookings AS b
+        WHERE b.user_id = u.user_id
+    ) AS booking_count
 FROM users AS u
-LEFT JOIN bookings AS b
-    ON u.user_id = b.user_id
-
-UNION
-
-SELECT 
-    u.user_id,
-    u.first_name,
-    u.last_name,
-    b.booking_id,
-    b.property_id,
-    b.start_date,
-    b.end_date
-FROM users AS u
-RIGHT JOIN bookings AS b
-    ON u.user_id = b.user_id;
+WHERE (
+    SELECT COUNT(*)
+    FROM bookings AS b
+    WHERE b.user_id = u.user_id
+) > 3
+ORDER BY booking_count DESC, u.user_id;
 ```
 
-Explanation:
+**Why correlated?**
+The inner query references `u.user_id` from the outer query (`users`). For each user row, it counts that user’s bookings, enabling row-by-row filtering.
 
-Combines the results of both LEFT JOIN and RIGHT JOIN using UNION.
+---
 
-Ensures that:
+## 📈 Performance Tips (optional but recommended)
 
-Users with no bookings are included.
+* Inspect plans:
 
-Bookings with no valid user are also shown.
+  ```sql
+  EXPLAIN SELECT ...;         -- MySQL
+  EXPLAIN ANALYZE SELECT ...; -- PostgreSQL
+  ```
+* Helpful indexes for these patterns:
 
-Useful for identifying data mismatches or orphaned records.
+  ```sql
+  CREATE INDEX idx_reviews_property_id_rating ON reviews(property_id, rating);
+  CREATE INDEX idx_bookings_user_id ON bookings(user_id);
+  ```
+* If the `reviews` table is large, the derived-table join version can be easier for the optimizer to handle than `IN (subquery)` in some engines.
 
-#### 🧠 Learning Takeaways
+---
 
-INNER JOIN: returns only matching records.
+## 🧠 Key Learnings
 
-LEFT JOIN: preserves all rows from the left table.
-
-FULL OUTER JOIN: merges both sides, including non-matching records.
-
-UNION-based FULL JOIN: practical workaround in MySQL.
-
-Joins enable complex data relationships and analytical insights in real-world relational models.
+* **Non-correlated subqueries** run independently of the outer query (great for “IN/HAVING” filters).
+* **Correlated subqueries** depend on the current row of the outer query (useful for per-row checks like “count per user”).
+* Always **verify with EXPLAIN** and add **supporting indexes** to keep these patterns fast at scale.
 
